@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+GitRepoDir=$(cd $(dirname ${BASH_SOURCE[0]}); pwd)
+function bappstore_list() {
+  local cacheDir="/tmp/portswigger.net"
+  if [ ! -d "${cacheDir}" ]; then mkdir ${cacheDir}; fi
+  local htmlFile="${cacheDir}/bappstore.html"
+  local jsonFile="${cacheDir}/bappstore.json"
+
+  local readmeFile="${GitRepoDir}/README.md"
+  echo "| index | extension | rating | score | last updated | store & github urls | desciption |" > ${readmeFile}
+  echo "|:------|:----------|:-------|:------|:-------------|:--------------------|:-----------|" >> ${readmeFile}
+
+  curl -s https://portswigger.net/bappstore > ${htmlFile}
+  cat ${htmlFile} | pup 'table.bapps-table tbody tr json{}' > ${jsonFile}
+
+  local appCount=$(cat ${jsonFile} | jq '. | length')
+  for((index=0;index<appCount;index++))
+  do
+
+    local appContent=$(cat ${jsonFile} | jq ".[${index}]")
+    local appName=$(echo "${appContent[@]}" | jq '.children[0].children[0].children[0].text' | tr -d '[\"]')
+    local appLink=$(echo "${appContent[@]}" | jq '.children[0].children[0].children[0].href' | tr -d '[\"]')
+    local appDesc=$(echo "${appContent[@]}" | jq '.children[0].children[1].text' | tr -d '[\"]')
+    local appRating=$(echo "${appContent[@]}" | jq '.children[1].children[1].children[1]."data-rating"' | tr -d '[\"]')
+    # local appPopularity=$(echo "${appContent[@]}" | jq '.children[2].children[1].children[1]."data-lineexecutionscore"' | tr -d '[\"]')
+    local appScore=$(echo "${appContent[@]}" | jq '.children[2].children[1].children[2]."data-executionscore"' | tr -d '[\"]')
+    local appLastUpdated=$(echo "${appContent[@]}" | jq '.children[3].text' | tr -d '[\"]')
+    appLastUpdated=$(date -j -f "%d %B %Y" "${appLastUpdated[@]}" "+%Y-%m-%d")
+
+    local appRef="${appLink##*/}"
+    local appPageUrl="https://portswigger.net/bappstore/${appRef}"
+    local appDownloadUrl="https://portswigger.net/bappstore/bapps/download/${appRef}"
+    local appPageHtml="${cacheDir}/bappstore_${appRef}.html"
+    curl -s "${appPageUrl}" > ${appPageHtml}
+    local appGithubUrl=$(cat "${appPageHtml}" | pup 'a.icon-ps-github attr{href}')
+    echo "| $((index+1)) | ${appName[@]//\|/} | ${appRating} | ${appScore} | ${appLastUpdated} | [BAppStore](${appPageUrl})/[GitHub](${appGithubUrl})/[Download](${appDownloadUrl}) | ${appDesc} |" >> ${readmeFile}
+    done
+}
+bappstore_list
